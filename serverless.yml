@@ -1,0 +1,198 @@
+org: photonadmin
+app: photonranch
+
+# Based on tutorial: 
+# https://levelup.gitconnected.com/creating-a-chat-app-with-serverless-websockets-and-python-a-tutorial-54cbc432e4f
+
+service: photonranch-chat
+
+custom:
+  region: us-east-1
+  stage: dev
+  pythonRequirements:
+    dockerizePip: true
+    noDeploy: []
+
+provider:
+  name: aws
+  runtime: python3.7
+  websocketApiName: photonranch-chat-ws
+  websocketApiRouteSelectionExpression: $request.body.action
+  environment:
+    CONNECTIONS_TABLE: photonranch-chat_Connections
+    MESSAGES_TABLE: photonranch-chat_Messages
+    API_URL: 
+      Fn::Join:
+        - ""
+        - - "https://"
+          - Ref: "ApiGatewayRestApi"
+          - ".execute-api.${self:custom.region}.amazonaws.com/${self:custom.stage}"
+    WSS_URL:
+      Fn::Join:
+        - ""
+        - - "https://"
+          - Ref: "WebsocketsApi"
+          - ".execute-api.${self:custom.region}.amazonaws.com/${self:custom.stage}"
+    WSS_DOMAIN:
+      Fn::Join:
+        - ""
+        - - "wss://"
+          - Ref: "WebsocketsApi"
+          - ".execute-api.${self:custom.region}.amazonaws.com"
+    WSS_STAGE: ${self:custom.stage}
+
+
+
+  iamRoleStatements:
+
+    # Permission to manage the websocket connections
+    - Effect: Allow 
+      Action: 
+        - "execute-api:ManageConnections"
+      Resource:
+        - "arn:aws:execute-api:*:*:**/@connections/*"
+
+    - Effect: Allow 
+      Action: 
+        - "dynamodb:PutItem"
+        - "dynamodb:GetItem"
+        - "dynamodb:UpdateItem"
+        - "dynamodb:DeleteItem"
+        - "dynamodb:BatchGetItem"
+        - "dynamodb:BatchWriteItem"
+        - "dynamodb:Scan"
+        - "dynamodb:Query"
+        - dynamodb:DescribeStream
+        - dynamodb:GetRecords
+        - dynamodb:GetShardIterator
+        - dynamodb:ListStreams
+      Resource:
+        - "arn:aws:dynamodb:us-east-1:*:*"
+
+
+plugins:
+  - serverless-python-requirements
+
+
+functions:
+  connectionManager:
+    handler: handler.connection_manager
+    events:
+      - websocket:
+          route: $connect
+      - websocket:
+          route: $disconnect
+  defaultMessage:
+    handler: handler.default_message
+    events:
+      - websocket:
+          route: $default
+  getRecentMessages:
+    handler: handler.get_recent_messages
+    events:
+      - websocket:
+          route: getRecentMessages
+  sendMessage:
+    handler: handler.send_message
+    events:
+      - websocket:
+          route: sendMessage
+  getOnlineUsers:
+    handler: handler.getOnlineUsers
+    events:
+      - http:
+          path: onlineusers
+          method: get
+          cors:
+            origin: '*'
+            headers:
+              - Content-Type
+              - X-Amz-Date
+              - Authorization
+              - X-Api-Key
+              - X-Amz-Security-Token
+              - X-Amz-User-Agent
+              - Access-Control-Allow-Origin
+              - Access-Control-Allow-Credentials
+  ping:
+    handler: handler.ping
+    events:
+      - http:
+          path: ping
+          method: get
+
+  #streamFunction:
+    #handler: handler.streamHandler
+    #events:
+      #- stream: 
+          #type: dynamodb
+          #arn: 
+            #Fn::GetAtt:
+              #- statusTable1
+              #- StreamArn
+
+resources: # CloudFormation template syntax from here on.
+  Outputs:
+    ApiUrl:
+      Description: "The api URL"
+      Value:
+        Fn::Join:
+          - ""
+          - - "https://"
+            - Ref: "ApiGatewayRestApi"
+            - ".execute-api.${self:custom.region}.amazonaws.com/${self:custom.stage}"
+
+  Resources:
+
+    #StreamFunctionLambdaFunction:
+      #Type: AWS::Lambda::Function
+      #DependsOn:
+        #- "statusTable1"
+
+    messagesTable: 
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:provider.environment.MESSAGES_TABLE}
+        AttributeDefinitions:
+          - AttributeName: Room
+            AttributeType: S
+          - AttributeName: Index
+            AttributeType: N
+        KeySchema:
+          - AttributeName: Room
+            KeyType: HASH
+          - AttributeName: Index
+            KeyType: RANGE
+        ProvisionedThroughput:
+          ReadCapacityUnits: 1
+          WriteCapacityUnits: 1
+
+    connectionsTable: 
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:provider.environment.CONNECTIONS_TABLE}
+        AttributeDefinitions:
+          - AttributeName: ChatRoom
+            AttributeType: S
+          - AttributeName: ConnectionID
+            AttributeType: S
+        KeySchema:
+          - AttributeName: ChatRoom
+            KeyType: HASH
+          - AttributeName: ConnectionID
+            KeyType: RANGE
+        GlobalSecondaryIndexes:
+          - IndexName: ConnectionID
+            KeySchema:
+              - AttributeName: ConnectionID
+                KeyType: HASH
+              - AttributeName: ChatRoom
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
+            ProvisionedThroughput:
+              ReadCapacityUnits: 1
+              WriteCapacityUnits: 1
+        ProvisionedThroughput:
+          ReadCapacityUnits: 1
+          WriteCapacityUnits: 1
