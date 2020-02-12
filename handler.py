@@ -20,7 +20,15 @@ class DecimalEncoder(json.JSONEncoder):
 def _get_response(status_code, body):
     if not isinstance(body, str):
         body = json.dumps(body)
-    return {"statusCode": status_code, "body": body}
+    return {
+        "statusCode": status_code, 
+        'headers': {
+            # Required for CORS support to work
+            'Access-Control-Allow-Origin': '*',
+            # Required for cookies, authorization headers with HTTPS
+            'Access-Control-Allow-Credentials': 'true',
+        },
+        "body": body}
 
 
 def connection_manager(event, context):
@@ -67,8 +75,8 @@ def connection_manager(event, context):
             KeyConditionExpression=Key('ConnectionID').eq(connectionID)
         )
 
-        # Remove each connectino for the connectionID from the database
         for c in connections['Items']:
+            # Remove each connection for the connectionID from the database
             table.delete_item(
                 Key={
                     "ChatRoom": c["ChatRoom"],
@@ -76,16 +84,17 @@ def connection_manager(event, context):
                 }
             ) 
 
-        # Send an updated users list to all clients in the room
-        users = _get_online_users(room)
-        connections = [x["ConnectionID"] for x in users if "ConnectionID" in x]
-        logger.debug("Sending online user list: {}".format(users))
-        data = {"onlineUsers": users}
-        for connectionID in connections:
-            try:
-                _send_to_connection(connectionID, data, event)
-            except: 
-                continue
+            # Send an updated users list to all clients in the room
+            room = c["ChatRoom"]
+            users = _get_online_users(room)
+            connectionIDs = [x["ConnectionID"] for x in users if "ConnectionID" in x]
+            logger.debug("Sending online user list: {}".format(users))
+            data = {"onlineUsers": users}
+            for connectionID in connectionIDs:
+                try:
+                    _send_to_connection(connectionID, data, event)
+                except: 
+                    continue
         
         return _get_response(200, "Disconnect successful.")
 
@@ -94,7 +103,6 @@ def connection_manager(event, context):
     else:
         logger.error("Connection manager received unrecognized eventType '{}'")
         return _get_response(500, "Unrecognized eventType.")
-
 
 def _get_body(event):
     try:
@@ -114,14 +122,11 @@ def _send_to_connection(connection_id, data, event):
         Data=json.dumps(data, cls=DecimalEncoder).encode('utf-8')
     )
 
-#def _send_to_connection2(connection_id, data, wss_url):
-    #gatewayapi = boto3.client("apigatewaymanagementapi", endpoint_url=wss_url)
-    #return gatewayapi.post_to_connection(
-        #ConnectionId=connection_id,
-        #Data=json.dumps({"messages":[{"username":"aws", "content": data}]}).encode('utf-8')
-    #)
-
 def _get_online_users(room):
+    """
+    This is the helper function that returns a list of dicts representing
+    the users online in a given room.
+    """
     connectionsTableName = os.getenv("CONNECTIONS_TABLE")
     table = dynamodb.Table(connectionsTableName)
 
@@ -138,6 +143,9 @@ def _get_online_users(room):
     return connections
 
 def getOnlineUsers(event, context):
+    """
+    This is the api endpoint which uses _get_online_users().
+    """
     room = event["queryStringParameters"].get("room", "error")
     if room == "error":
         return _get_response(400, "Requires query string param 'room'.")
@@ -253,52 +261,3 @@ def default_message(event, context):
     logger.info("Unrecognized WebSocket action received.")
     return _get_response(400, "Unrecognized WebSocket action.")
 
-
-def ping(event, context):
-    """
-    Sanity check endpoint that echoes back 'PONG' to the sender.
-    """
-    logger.info("Ping requested.")
-    return _get_response(200, "PONG!")
-
-#def newstatus(event, context):
-    #logger.info("newstatus sent")
-    #table = dynamodb.Table("photonranch-chat_Newstatus1")
-    #message = {"status_id": "obsy_status", "content": str(time.time())[-1]}
-    #table.put_item(Item=message)
-    #return _get_response(200, "Status sent.")
-
-
-#def streamHandler(event, context):
-    #print(event)
-    #print(os.getenv('API_URL'))
-    #print(os.getenv('WSS_URL'))
-    #data = event['Records'][0]['dynamodb']['NewImage']
-    #creationTime = event['Records'][0]['dynamodb']['ApproximateCreationDateTime']
-
-    #print("data: ")
-    #print(data)
-    #print("creation time: ")
-    #print(creationTime)
-
-    ## Get all current connections
-    #table = dynamodb.Table("photonranch-chat_Connections")
-    #response = table.scan(ProjectionExpression="ConnectionID")
-    #items = response.get("Items", [])
-    #connections = [x["ConnectionID"] for x in items if "ConnectionID" in x]
-
-    ## Send the message data to all connections
-    #logger.debug("Broadcasting message: {}".format(data))
-    #dataToSend = {"messages": [data]}
-    #connectionData = {
-        #"requestContext": {
-            #"stage": os.getenv('WSS_STAGE'),
-            #"domainName": os.getenv('WSS_DOMAIN')
-        #}
-    #}
-    #for connectionID in connections:
-        #connectionResponse = _send_to_connection2(connectionID, dataToSend,os.getenv('WSS_URL'))
-        #print('connection response: ')
-        #print(json.dumps(connectionResponse))
-
-    #return _get_response(200, "stream has activated this function")

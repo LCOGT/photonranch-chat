@@ -21,26 +21,6 @@ provider:
   environment:
     CONNECTIONS_TABLE: photonranch-chat_Connections
     MESSAGES_TABLE: photonranch-chat_Messages
-    API_URL: 
-      Fn::Join:
-        - ""
-        - - "https://"
-          - Ref: "ApiGatewayRestApi"
-          - ".execute-api.${self:custom.region}.amazonaws.com/${self:custom.stage}"
-    WSS_URL:
-      Fn::Join:
-        - ""
-        - - "https://"
-          - Ref: "WebsocketsApi"
-          - ".execute-api.${self:custom.region}.amazonaws.com/${self:custom.stage}"
-    WSS_DOMAIN:
-      Fn::Join:
-        - ""
-        - - "wss://"
-          - Ref: "WebsocketsApi"
-          - ".execute-api.${self:custom.region}.amazonaws.com"
-    WSS_STAGE: ${self:custom.stage}
-
 
 
   iamRoleStatements:
@@ -114,22 +94,7 @@ functions:
               - X-Amz-User-Agent
               - Access-Control-Allow-Origin
               - Access-Control-Allow-Credentials
-  ping:
-    handler: handler.ping
-    events:
-      - http:
-          path: ping
-          method: get
 
-  #streamFunction:
-    #handler: handler.streamHandler
-    #events:
-      #- stream: 
-          #type: dynamodb
-          #arn: 
-            #Fn::GetAtt:
-              #- statusTable1
-              #- StreamArn
 
 resources: # CloudFormation template syntax from here on.
   Outputs:
@@ -143,11 +108,6 @@ resources: # CloudFormation template syntax from here on.
             - ".execute-api.${self:custom.region}.amazonaws.com/${self:custom.stage}"
 
   Resources:
-
-    #StreamFunctionLambdaFunction:
-      #Type: AWS::Lambda::Function
-      #DependsOn:
-        #- "statusTable1"
 
     messagesTable: 
       Type: AWS::DynamoDB::Table
