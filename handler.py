@@ -117,10 +117,16 @@ def _send_to_connection(connection_id, data, event):
         endpoint_url = "https://" + event["requestContext"]["domainName"] +
             "/" + event["requestContext"]["stage"]
     )
-    return gatewayapi.post_to_connection(
-        ConnectionId=connection_id,
-        Data=json.dumps(data, cls=DecimalEncoder).encode('utf-8')
-    )
+    try: 
+        posted = gatewayapi.post_to_connection(
+            ConnectionId=connection_id,
+            Data=json.dumps(data, cls=DecimalEncoder).encode('utf-8')
+        )
+        return posted
+    except Exception as e:
+        print(f"Could not send to connection {connection_id}")
+        print(e)
+
 
 def _get_online_users(room):
     """
@@ -207,7 +213,10 @@ def send_message(event, context):
     logger.debug("Broadcasting message: {}".format(message))
     data = {"messages": [message]}
     for connectionID in connections:
-        _send_to_connection(connectionID, data, event)
+        try: 
+            _send_to_connection(connectionID, data, event)
+        except:
+            continue
 
     return _get_response(200, "Message sent to all connections.")
 
