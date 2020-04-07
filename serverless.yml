@@ -126,6 +126,9 @@ resources: # CloudFormation template syntax from here on.
         ProvisionedThroughput:
           ReadCapacityUnits: 1
           WriteCapacityUnits: 1
+        TimeToLiveSpecification:
+          AttributeName: TimeToLive
+          Enabled: true
 
     connectionsTable: 
       Type: AWS::DynamoDB::Table

@@ -192,9 +192,16 @@ def send_message(event, context):
     timestamp = int(time.time())
     username = body["username"]
     content = body["content"]
-    table.put_item(Item={"Room": room, "Index": index,
-            "Timestamp": timestamp, "Username": username,
-            "Content": content})
+    timeToLive = int(time.time()) + 3*86400 # ttl of 3 days 
+    item = {
+        "Room": room,
+        "Index": index,
+        "Username": username,
+        "Content": content,
+        "Timestamp": timestamp,
+        "TimeToLive": timeToLive,
+    } 
+    table.put_item(Item=item)
 
     # Get all current connections
     users = _get_online_users(room)
